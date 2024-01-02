@@ -21,11 +21,12 @@ export function LoanDetails() {
     const navigate = useNavigate()
 
     const [showModal, setShowModal] = useState(false);
+    const [refresh, setRefresh] = useState(false)
     const [loan, setLoan] = useState([]);
     const [payments, setPayments] = useState([]);
     const [schedule, setSchedule] = useState([]);
     const [totalCollectible, settotalCollectible] = useState('')
-    const [totalPaid, settotalPaid] = useState('')
+    const [totalPaid, settotalPaid] = useState(0)
     const [settlementAmount, setSettlementAmount] = useState('')
     const [monthsLeft, setMonthsLeft] = useState(0);
 
@@ -84,6 +85,14 @@ export function LoanDetails() {
         });
     };
 
+
+    // Current date
+    const date = new Date();
+    let day = date.getDate();
+    let month = date.getMonth() + 1;
+    let year = date.getFullYear();
+    let currentDate = `${year}-${month}-${day}`;
+
     // Payments form submit
     const handleFormSubmit = (e) => {
         e.preventDefault();
@@ -91,7 +100,8 @@ export function LoanDetails() {
         // Create an object to send to your API
         const postData = {
             amount: paymentData.amount,
-            loan_id: loanId
+            loanID: loanId,
+            date: currentDate
         };
 
         console.log(postData)
@@ -100,11 +110,11 @@ export function LoanDetails() {
         axios.post(`${API_URL}/payments`, postData)
             .then((response) => {
                 // Handle success, e.g., show a success message or reset the form
-                console.log(`payment details added`)
-                navigate(`/dashboard/loan-details?loan_id=${loanId}`)
+                alert(`payment details added`)
+                navigate(`/dashboard/loan-details?loan_id=${loanId}`, { replace: true })
             })
             .catch((error) => {
-                console.error('Error posting payment data:', error);
+                alert(`Error posting payment data: ${error}`);
                 // Handle error, e.g., show an error message
             });
     };
@@ -260,7 +270,8 @@ export function LoanDetails() {
 
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
-    const loanId = queryParams.get('loan_id');
+    const loanId = parseInt(queryParams.get('loan_id'));
+
     let totalCollect = 0;
     let totalPay = 0;
 
@@ -272,16 +283,24 @@ export function LoanDetails() {
         return `${year}-${month}-${day}`;
     }
 
-    //Reformat date created
-    const dateCreated = loan.created
-    const parsedCreated = new Date(dateCreated)
-    const formattedCreated = formatDate(parsedCreated)
+    function reformatDate(date) {
+        //Reformat date created
+        const dateCreated = loan.createdAt
+        const parsedCreated = new Date(dateCreated)
+        const formattedCreated = formatDate(parsedCreated)
+
+        return formattedCreated
+    }
+
+
+
 
     useEffect(() => {
         // Fetch payments from the API using axios
         axios.get(`${API_URL}/payments/${loanId}`)
             .then(response => {
-                setPayments(response.data);
+                setPayments(response.data[0]);
+                console.log("payments", response.data[0][0])
             })
             .catch(error => {
                 console.error('Error fetching payments:', error);
@@ -300,6 +319,8 @@ export function LoanDetails() {
         let openingBalanaceInterest = 0;
         let openingBalance = 0
         let interestPayment = 0
+        let arrears_pm1 = 0
+        let arrears_pm2 = 0
 
 
         for (let i = 0; i < loan.cycle; i++) {
@@ -307,7 +328,6 @@ export function LoanDetails() {
             const principalPayment = monthlyPayment - interestPayment;
 
             let principalPaid = 0
-            let capitalRaised = 0;
             let closingBalance = 0;
             let variance = 0;
             let interestPaid = 0;
@@ -324,14 +344,15 @@ export function LoanDetails() {
             }
 
             const paymentAmount = payments[i];
+            
 
             if (paymentAmount) {
+                console.log("payment amount", payments[i])
 
                 variance = monthlyPayment - paymentAmount.amount;
                 interestPayment = openingBalance * monthlyInterestRate
 
                 if (paymentAmount.amount > (openingBalanaceInterest + interestPayment)) {
-
                     interestPaid = parseFloat(openingBalanaceInterest + interestPayment)
                 } else {
                     interestPaid = parseFloat(paymentAmount.amount)
@@ -353,14 +374,31 @@ export function LoanDetails() {
             cumulativePayment += paymentAmount ? paymentAmount.amount : 0;
             outstandingBalance = parseFloat(closingBalance + closingBalanceInterest)
 
-            // const capitalRaised = PPMT(monthlyInterestRate, i + 1, loan.cycle, loan.amount);
+            const capitalRaised = calculatePPMT(loan.amount, monthlyInterestRate, loan.cycle, i + 1, loan.amount)
 
+            let capitalOutstanding = 0
+
+            if (capitalRaised - principalPaid > 0) {
+                capitalOutstanding = capitalRaised - principalPaid
+            }
+
+            if (capitalOutstanding > 0) {
+                arrears_pm1 = monthlyInterestRate * capitalOutstanding
+                arrears_pm2 = arrears_pm2
+
+                if (arrears_pm1 === 0) {
+                    arrears_pm2 = arrears_pm1
+                } else {
+                    arrears_pm2 = arrears_pm1 + arrears_pm2;
+                }
+            }
 
             newSchedule.push({
                 date: date,
                 payment: monthlyPayment.toFixed(2),
                 principal: principalPaid.toFixed(2),
                 capitalRaised: capitalRaised.toFixed(2),
+                capitalOutstanding: capitalOutstanding.toFixed(2),
                 interest: interestPayment.toFixed(2),
                 openingBalance: openingBalance.toFixed(2),
                 closingBalance: closingBalance.toFixed(2),
@@ -370,24 +408,17 @@ export function LoanDetails() {
                 openingBalanaceInterest: openingBalanaceInterest.toFixed(2),
                 interestPaid: paymentAmount ? parseFloat(interestPaid).toFixed(2) : 0,
                 closingBalanceInterest: closingBalanceInterest.toFixed(2),
-                outstandingBalance: outstandingBalance.toFixed(2)
+                outstandingBalance: outstandingBalance.toFixed(2),
+                arrears_pm1: arrears_pm1.toFixed(2),
+                arrears_pm2: parseFloat(arrears_pm2).toFixed(2)
 
             });
+
+
             openingBalanaceInterest = closingBalanceInterest;
             openingBalance = closingBalance;
+            arrears_pm1 = arrears_pm2
         }
-
-
-
-        // Loop through the newSchedule array to calculate the capital raised
-        // for (let i = 0; i < newSchedule.length; i++) {
-        //     capitalRaised += parseFloat(newSchedule[i].principal);
-        // }
-
-        // // Add the capitalRaised value to the newSchedule array for each period
-        // newSchedule.forEach(item => {
-        //     item.capitalRaised = capitalRaised.toFixed(2);
-        // });
 
 
         setSchedule(newSchedule);
@@ -397,6 +428,9 @@ export function LoanDetails() {
         for (let i = newSchedule.length - 1; i >= 0; i--) {
             if (newSchedule[i].paymentAmount !== 0) {
                 settleAmount = parseFloat(newSchedule[i].outstandingBalance.replace(/[^0-9.-]+/g, ''));
+                if (newSchedule[i].arrears_pm1 === 0) {
+
+                }
                 break;
             }
         }
@@ -413,15 +447,21 @@ export function LoanDetails() {
         }
         setMonthsLeft(nullPaymentCount);
         settotalCollectible(currencyFormatter.format(totalCollect))
-        settotalPaid(totalPay)
+        settotalPaid(totalPay.toFixed(2))
 
     }, [loan.amount, loan.interest_percentage, loan.contract_date, loan.cycle, payments]);
 
     // Function to calculate PPMT
-    function PPMT(rate, period, periods, presentValue) {
-        const denominator = Math.pow(1 + rate, periods);
-        const numerator = Math.pow(1 + rate, period - 1);
-        return -presentValue * rate * (denominator - numerator) / denominator;
+
+    function calculatePPMT(loanAmount, monthlyInterestRate, periods, period, presentValue) {
+
+        // Calculate the monthly payment
+        let monthlyPayment = loanAmount * monthlyInterestRate / (1 - Math.pow(1 + monthlyInterestRate, -periods));
+
+        // Calculate the principal payment for the specified period
+        let principalPayment = presentValue * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, period - 1) / (Math.pow(1 + monthlyInterestRate, periods) - 1);
+
+        return principalPayment;
     }
 
     //Get loan Data
@@ -500,7 +540,7 @@ export function LoanDetails() {
                             </Typography>
                             <div className="flex flex-col gap-2">
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
-                                    Contract Date : {loan.contract_date}
+                                    Contract Date : {reformatDate(loan.contract_date)}
                                 </Typography>
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
                                     Amount : {loan.amount}
@@ -521,7 +561,7 @@ export function LoanDetails() {
                                     Settlement Date : {loan.outright_settlement_date}
                                 </Typography>
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
-                                    Date Added : {formattedCreated}
+                                    Date Added : {reformatDate(loan.createdAt)}
                                 </Typography>
                             </div>
                         </div>
@@ -570,57 +610,8 @@ export function LoanDetails() {
                                 </div>
                             </form>
                             {/* Modal to confirm settling the loan */}
-                            <div className="bg-white rounded-lg p-6 max-w-xs">
-                                <Modal
-                                    isOpen={showModal}
-                                    onRequestClose={() => setShowModal(false)}
-                                    style={{
-                                        overlay: {
-                                            position: 'fixed',
-                                            top: 0,
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
-                                            // backgroundColor: 'rgba(35, 255, 255, 0.75)'
-                                        },
-                                        content: {
-                                            position: 'fixed',
-                                            top: '40px',
-                                            left: '540px',
-                                            right: '540px',
-                                            bottom: '400px',
-                                            border: '1px solid #ccc',
-                                            background: '#fff',
-                                            overflow: 'auto',
-                                            WebkitOverflowScrolling: 'touch',
-                                            borderRadius: '4px',
-                                            outline: 'none',
-                                            padding: '20px'
-                                        }
-                                    }}
-                                >
-                                    <div className="bg-white rounded-lg p-6 mx-auto max-w-xs">
-                                        <h2 className="text-lg font-bold mb-4">Confirm Settling Loan</h2>
-                                        <p className="mb-4">Are you sure you want to settle the loan?</p>
-                                        <div className="flex justify-between">
-                                            <button
-                                                onClick={confirmSettle}
-                                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2"
-                                            >
-                                                Yes, Settle
-                                            </button>
-                                            <button
-                                                onClick={() => setShowModal(false)}
-                                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                </Modal>
-                            </div>
                         </div>
-                        <div className='border-solid border-2 p-4 mx-2'>
+                        {/* <div className='border-solid border-2 p-4 mx-2'>
                             <Typography variant="h6" color="blue-gray" className="mb-3">
                                 Add Arrears
                             </Typography>
@@ -634,7 +625,7 @@ export function LoanDetails() {
                                 </div>
                             </form>
 
-                        </div>
+                        </div> */}
                     </div>
                     <hr className='my-4' />
                     <div className='grid lg:grid-cols-2 lg:space-x-24 lg:gap-24  w-100'>
@@ -655,16 +646,18 @@ export function LoanDetails() {
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Date</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Expected Payment</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Actual Payment</th>
-                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Variance</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">O/B Capital</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Raised</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Payment</th>
+                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Outstanding</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">C/B Capital</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">O/B Interest</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Interest Raised</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Interest Payment</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">C/B Interest</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Outstanding Balance</th>
+                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Arrears P/M</th>
+                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Arrears P/M 2</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -673,16 +666,18 @@ export function LoanDetails() {
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.date.toLocaleDateString()}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.payment}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.paymentAmount}</td>
-                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.variance}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.openingBalance}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.capitalRaised}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.principal}</td>
+                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.capitalOutstanding}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.closingBalance}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.openingBalanaceInterest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.interest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.interestPaid}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.closingBalanceInterest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.outstandingBalance}</td>
+                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.arrears_pm1}</td>
+                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.arrears_pm2}</td>
                                     </tr>
                                 ))}
                             </tbody>
