@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import Datepicker from "react-tailwindcss-datepicker";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useAsyncError, useNavigate } from "react-router-dom";
 import HTMLToWord from "@/widgets/layout/HTMLToWord";
 import Modal from 'react-modal';
 import {
@@ -19,6 +19,14 @@ export function AddLoan() {
 
     const API_URL = import.meta.env.VITE_API_URL;
     const navigate = useNavigate();
+
+
+    const [settlementAmount, setSettlementAmount] = useState('')
+    const [monthsLeft, setMonthsLeft] = useState(0);
+    const [totalPaid, settotalPaid] = useState(0)
+
+    const [totalCollectible, settotalCollectible] = useState(0)
+    const [expectedDeduction, setExpectedDeduction] = useState(0)
 
     const [contract, setContract] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -38,6 +46,9 @@ export function AddLoan() {
     const [banks, setBanks] = useState([]);
     const [selectedBank, setSelectedBank] = useState('');
 
+    const [payments, setPayments] = useState([]);
+    const [schedule, setSchedule] = useState([]);
+
     const [dateValue, setDateValue] = useState({
         startDate: null,
         endDate: null
@@ -54,9 +65,11 @@ export function AddLoan() {
         organizationID: "",
         bankID: "",
         amount: "",
-        interest_percentage: "",
+        interest_percentage: 60,
         cycle: ""
     });
+
+    const user_id = localStorage.getItem("user_id");
 
     //Get list of organizations
     useEffect(() => {
@@ -403,14 +416,167 @@ export function AddLoan() {
 
     };
 
+    //Calculate Amortization
+
+
+
+
     const confirmContract = () => {
         const formData = new FormData();
+
+        
+        const monthlyInterestRate = loanData.interest_percentage / 12 / 100;
+        const monthlyPayment = (loanData.amount * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -loanData.cycle));
+
+        console.log(monthlyPayment)
+
+        let remainingBalance = loanData.amount;
+        let totalCollect = 0;
+        let totalPay = 0;
+
+        const newSchedule = [];
+        let cumulativePayment = 0;
+        let openingBalanaceInterest = 0;
+        let openingBalance = 0
+        let interestPayment = 0
+        let arrears_pm1 = 0
+        let arrears_pm2 = 0
+
+        setExpectedDeduction(monthlyPayment)
+
+
+        for (let i = 0; i < loanData.cycle; i++) {
+
+            const principalPayment = monthlyPayment - interestPayment;
+
+            let principalPaid = 0
+            let closingBalance = 0;
+            let variance = 0;
+            let interestPaid = 0;
+            let closingBalanceInterest = 0
+            let outstandingBalance = 0;
+
+            const date = new Date(loanData.contract_date);
+            date.setMonth(date.getMonth() + i + 1);
+            date.setDate(0);
+
+            if (i === 0) {
+                openingBalance = remainingBalance;
+                interestPayment = remainingBalance * monthlyInterestRate;
+            }
+
+            const paymentAmount = payments[i];
+
+
+            if (paymentAmount) {
+                console.log("payment amount", payments[i])
+
+                variance = monthlyPayment - paymentAmount.amount;
+                interestPayment = openingBalance * monthlyInterestRate
+
+                if (paymentAmount.amount > (openingBalanaceInterest + interestPayment)) {
+                    interestPaid = parseFloat(openingBalanaceInterest + interestPayment)
+                } else {
+                    interestPaid = parseFloat(paymentAmount.amount)
+                }
+
+                const remainingPayment = paymentAmount.amount - interestPaid;
+                // principalPaid = remainingPayment > 0 ? remainingPayment : 0;
+                if (paymentAmount.amount - interestPaid > 0) {
+                    principalPaid = paymentAmount.amount - interestPaid
+                    // console.log(interestPaid)
+                }
+
+            }
+
+
+            closingBalanceInterest = (openingBalanaceInterest + interestPayment) - interestPaid
+            closingBalance = parseFloat(openingBalance - principalPaid)
+
+            cumulativePayment += paymentAmount ? paymentAmount.amount : 0;
+            outstandingBalance = parseFloat(closingBalance + closingBalanceInterest)
+
+            const capitalRaised = calculatePPMT(loanData.amount, monthlyInterestRate, loanData.cycle, i + 1, loanData.amount)
+
+            let capitalOutstanding = 0
+
+            if (capitalRaised - principalPaid > 0) {
+                capitalOutstanding = capitalRaised - principalPaid
+            }
+
+            if (capitalOutstanding > 0) {
+                arrears_pm1 = monthlyInterestRate * capitalOutstanding
+                arrears_pm2 = arrears_pm2
+
+                if (arrears_pm1 === 0) {
+                    arrears_pm2 = arrears_pm1
+                } else {
+                    arrears_pm2 = arrears_pm1 + arrears_pm2;
+                }
+            }
+
+            newSchedule.push({
+                date: date,
+                payment: monthlyPayment.toFixed(2),
+                // principal: principalPaid.toFixed(2),
+                // capitalRaised: capitalRaised.toFixed(2),
+                // capitalOutstanding: capitalOutstanding.toFixed(2),
+                // interest: interestPayment.toFixed(2),
+                // openingBalance: openingBalance.toFixed(2),
+                // closingBalance: closingBalance.toFixed(2),
+                // paymentAmount: paymentAmount ? parseFloat(paymentAmount.amount) : 0,
+                cumulativePayment: cumulativePayment.toFixed(2),
+                // variance: paymentAmount ? parseFloat(variance).toFixed(2) : 0,
+                openingBalanaceInterest: openingBalanaceInterest.toFixed(2),
+                interestPaid: paymentAmount ? parseFloat(interestPaid).toFixed(2) : 0,
+                closingBalanceInterest: closingBalanceInterest.toFixed(2),
+                outstandingBalance: outstandingBalance.toFixed(2),
+                arrears_pm1: arrears_pm1.toFixed(2),
+                arrears_pm2: parseFloat(arrears_pm2).toFixed(2)
+
+            });
+
+
+            openingBalanaceInterest = closingBalanceInterest;
+            openingBalance = closingBalance;
+            arrears_pm1 = arrears_pm2
+        }
+
+
+        setSchedule(newSchedule);
+
+        // Find the last closing balance where paymentAmount is not null
+        let settleAmount = 0;
+        for (let i = newSchedule.length - 1; i >= 0; i--) {
+            if (newSchedule[i].paymentAmount !== 0) {
+                settleAmount = parseFloat(newSchedule[i].outstandingBalance.replace(/[^0-9.-]+/g, ''));
+                if (newSchedule[i].arrears_pm1 === 0) {
+
+                }
+                break;
+            }
+        }
+        setSettlementAmount(settleAmount.toFixed(2))
+
+        // Calculate total collectible, total amount paid and number of months left
+        let nullPaymentCount = 0;
+        for (let i = 0; i < newSchedule.length; i++) {
+            totalCollect += parseFloat(newSchedule[i].payment.replace(/[^0-9.-]+/g, ''));
+            totalPay += parseFloat(newSchedule[i].paymentAmount);
+            if (newSchedule[i].paymentAmount === 0) {
+                nullPaymentCount++;
+            }
+        }
+        console.log("totalCollect", totalCollect)
+        setMonthsLeft(nullPaymentCount);
+        settotalCollectible(totalCollect)
+        settotalPaid(totalPay.toFixed(2))
+
+
 
         for (let i = 0; i < selectedFiles.length; i++) {
             formData.append("files", selectedFiles[i]);
         }
-
-        // ...
 
         axios.post(`${API_URL}/upload/multiple`, formData, {
             headers: {
@@ -422,6 +588,7 @@ export function AddLoan() {
 
                 // Include the file URLs in your data to be sent to the API
                 const postData = {
+                    userID: user_id,
                     contract_date: dateValue.startDate,
                     clientID: selectedClient,
                     organizationID: selectedOrganization,
@@ -431,7 +598,9 @@ export function AddLoan() {
                     cycle: loanData.cycle,
                     payslip_url1: urls[0],
                     payslip_url2: urls[1],
-                    statusID: 1
+                    statusID: 1,
+                    total_collectible: totalCollect,
+                    monthly_deduction: monthlyPayment
                 };
 
                 console.log(postData)
@@ -455,6 +624,17 @@ export function AddLoan() {
         setShowModal(false);
     }
 
+    function calculatePPMT(loanAmount, monthlyInterestRate, periods, period, presentValue) {
+
+        // Calculate the monthly payment
+        let monthlyPayment = loanAmount * monthlyInterestRate / (1 - Math.pow(1 + monthlyInterestRate, -periods));
+
+        // Calculate the principal payment for the specified period
+        let principalPayment = presentValue * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, period - 1) / (Math.pow(1 + monthlyInterestRate, periods) - 1);
+
+        return principalPayment;
+    }
+
 
     return (
         <div className="mt-12 mb-8 flex flex-col gap-12">
@@ -463,10 +643,9 @@ export function AddLoan() {
                     <Typography variant="h6" color="white">
                         Add New Loan
                     </Typography>
-                    <HTMLToWord htmlContent={contract} />
                 </CardHeader>
                 <CardBody className="overflow-x-scroll px-0 pt-0 pb-2">
-                    <form className="my-12 grid grid-cols-3 gap-6 px-12" onSubmit={handleFormSubmit} >
+                    <form className="my-12 grid grid-cols-1 gap-6 lg:px-12" onSubmit={handleFormSubmit} >
                         <Select
                             variant="outlined"
                             label="Organization"
@@ -511,8 +690,8 @@ export function AddLoan() {
                         </Select>
                         <Input name="amount" type="number" label="Amount"
                             size="lg" required onChange={handleInputChange} />
-                        <Input name="interest_percentage" type="number" label="Interest (%)"
-                            size="lg" onChange={handleInputChange} />
+                        {/* <Input name="interest_percentage" type="number" label="Interest (%)"
+                            size="lg" onChange={handleInputChange} /> */}
                         <Input name="cycle" type="number" label="Loan Term (Number of Months)"
                             size="lg" onChange={handleInputChange} />
                         <Input type="file" label="Upload Last 2 Payslips" multiple
@@ -531,54 +710,54 @@ export function AddLoan() {
                     </form>
                     {/* Modal to show contract and Confirm loan */}
                     <div className="bg-white rounded-lg p-6 max-w-xs">
-                                <Modal
-                                    isOpen={showModal}
-                                    onRequestClose={() => setShowModal(false)}
-                                    style={{
-                                        overlay: {
-                                            position: 'fixed',
-                                            top: 0,
-                                            left: 0,
-                                            right: 0,
-                                            bottom: 0,
-                                            // backgroundColor: 'rgba(35, 255, 255, 0.75)'
-                                        },
-                                        content: {
-                                            position: 'fixed',
-                                            top: '40px',
-                                            left: '340px',
-                                            right: '40px',
-                                            bottom: '40px',
-                                            border: '1px solid #ccc',
-                                            background: '#fff',
-                                            overflow: 'auto',
-                                            WebkitOverflowScrolling: 'touch',
-                                            borderRadius: '4px',
-                                            outline: 'none',
-                                            padding: '20px'
-                                        }
-                                    }}
-                                >
-                                    <div className="bg-white rounded-lg mx-auto">
-                                        <h2 className="text-lg font-bold mb-4">Loan Contract</h2>
-                                        <div dangerouslySetInnerHTML={{ __html: contract }}/>
-                                        <div className="flex justify-between">
-                                            <button
-                                                onClick={confirmContract}
-                                                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2"
-                                            >
-                                                Create Loan
-                                            </button>
-                                            <button
-                                                onClick={() => setShowModal(false)}
-                                                className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                </Modal>
+                        <Modal
+                            isOpen={showModal}
+                            onRequestClose={() => setShowModal(false)}
+                            style={{
+                                overlay: {
+                                    position: 'fixed',
+                                    top: 0,
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    // backgroundColor: 'rgba(35, 255, 255, 0.75)'
+                                },
+                                content: {
+                                    position: 'fixed',
+                                    top: '40px',
+                                    left: '340px',
+                                    right: '40px',
+                                    bottom: '40px',
+                                    border: '1px solid #ccc',
+                                    background: '#fff',
+                                    overflow: 'auto',
+                                    WebkitOverflowScrolling: 'touch',
+                                    borderRadius: '4px',
+                                    outline: 'none',
+                                    padding: '20px'
+                                }
+                            }}
+                        >
+                            <div className="bg-white rounded-lg mx-auto">
+                                <h2 className="text-lg font-bold mb-4">Loan Contract</h2>
+                                <div dangerouslySetInnerHTML={{ __html: contract }} />
+                                <div className="flex justify-between">
+                                    <button
+                                        onClick={confirmContract}
+                                        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mr-2"
+                                    >
+                                        Create Loan
+                                    </button>
+                                    <button
+                                        onClick={() => setShowModal(false)}
+                                        className="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded"
+                                    >
+                                        Cancel
+                                    </button>
+                                </div>
                             </div>
+                        </Modal>
+                    </div>
                 </CardBody>
             </Card>
         </div>

@@ -21,13 +21,6 @@ export function Reports() {
     const [consolidated, setConsolidated] = useState([]);
     const [currentTable, setCurrentTable] = useState(null);
 
-    const [payments, setPayments] = useState([]);
-    const [schedule, setSchedule] = useState([]);
-    const [totalCollectible, settotalCollectible] = useState('')
-    const [totalPaid, settotalPaid] = useState(0)
-    const [settlementAmount, setSettlementAmount] = useState('')
-    const [monthsLeft, setMonthsLeft] = useState(0);
-
     const [page, setPage] = useState(1);
 
     const showTable = (tableNumber) => {
@@ -40,7 +33,6 @@ export function Reports() {
         axios.get(`${API_URL}/loans/new`) // Replace with your actual API endpoint
             .then((response) => {
                 setNewLoans(response.data);
-                console.log(response.data)
             })
             .catch((error) => {
                 console.error('Error fetching new loans:', error);
@@ -87,255 +79,95 @@ export function Reports() {
     function handleExportToExcel() {
         let table = currentTable
         if (table == 1) {
-            const htmlTable = document.querySelector('.newLoans-table'); // Select the table element
-            const ws = XLSX.utils.table_to_sheet(htmlTable); // Convert table to worksheet
-            const wb = XLSX.utils.book_new();
+            const wsData = [
+                ["Client Name", "Email", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Contract Date", "Due Date"],
+                ...newLoans.map((entry) => [
+                    entry.client_firstname + " " + entry.client_lastname,
+                    entry.client_mail,
+                    entry.client_phone,
+                    entry.organization_name,
+                    entry.status,
+                    entry.amount,
+                    entry.interest_percentage,
+                    entry.contract_date,
+                    entry.due_date
+                ]),
+            ];
 
-            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'New Loans Report');
             XLSX.writeFile(wb, 'new_loans_report.xlsx');
-
         } else if (table == 2) {
-            const htmlTable = document.querySelector('.settlement-table'); // Select the table element
-            const ws = XLSX.utils.table_to_sheet(htmlTable); // Convert table to worksheet
-            const wb = XLSX.utils.book_new();
+            const wsData = [
+                ["Client Name", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Settlement Amount", "Settlement Date", "Contract Date"],
+                ...settledLoans.map((entry) => [
+                    entry.client_firstname + " " + entry.client_lastname,
+                    entry.client_phone,
+                    entry.organization_name,
+                    entry.status,
+                    entry.amount,
+                    entry.interest_percentage,
+                    entry.outright_settlement_amount,
+                    entry.outright_settlement_date,
+                    entry.contract_date
+                ]),
+            ];
 
-            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Outright Settlements Report');
             XLSX.writeFile(wb, 'outright_settlements_report.xlsx');
         } else if (table == 3) {
-            const htmlTable = document.querySelector('.arrears-table'); // Select the table element
-            const ws = XLSX.utils.table_to_sheet(htmlTable); // Convert table to worksheet
-            const wb = XLSX.utils.book_new();
+            const wsData = [
+                ["Client Name", "Phone", "Organization", "Status", "Amount", "Arrears Charged", "Arrears P/M", "Arrears Due", "Arrears A/D", "Contract Date", "Due Date"],
+                ...arrears.map((entry) => [
+                    entry.client_firstname + " " + entry.client_lastname,
+                    entry.client_phone,
+                    entry.organization_name,
+                    entry.status,
+                    entry.amount,
+                    entry.arrears_charged,
+                    entry.arrears_pm,
+                    entry.arrears_due,
+                    entry.arrears_ad,
+                    entry.contract_date,
+                    entry.due_date
+                ]),
+            ];
 
-            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Arrears Report');
             XLSX.writeFile(wb, 'arrears_report.xlsx');
         } else if (table == 4) {
-            const htmlTable = document.querySelector('.consolidated-table'); // Select the table element
-            const ws = XLSX.utils.table_to_sheet(htmlTable); // Convert table to worksheet
-            const wb = XLSX.utils.book_new();
+            const wsData = [
+                ["Client Name", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Settlement Amount", "Settlement Date", "Arrears Charged", "Arrears P/M", "Arrears Due", "Arrears A/D", "Contract Date", "Due Date"],
+                ...consolidated.map((entry) => [
+                    entry.client_firstname + " " + entry.client_lastname,
+                    entry.client_phone,
+                    entry.organization_name,
+                    entry.status,
+                    entry.amount,
+                    entry.interest_percentage,
+                    entry.outright_settlement_amount,
+                    entry.outright_settlement_date,
+                    entry.arrears_charged,
+                    entry.arrears_pm,
+                    entry.arrears_due,
+                    entry.arrears_ad,
+                    entry.contract_date,
+                    entry.due_date
+                ]),
+            ];
 
-            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Consolidated Report');
             XLSX.writeFile(wb, 'consolidated_report.xlsx');
         }
 
     };
-
-    function calculateAmortization(interestRate, loanAmount, numberOfPayments, startDate, loan_id) {
-
-        axios.get(`${API_URL}/payments/${loan_id}`)
-            .then(response => {
-                setPayments(response.data[0]);
-            })
-            .catch(error => {
-                console.error('Error fetching payments:', error);
-            }
-            );
-
-        const monthlyInterestRate = interestRate / 100 / 12;
-        const monthlyPayment = (loanAmount * monthlyInterestRate) / (1 - Math.pow(1 + monthlyInterestRate, -numberOfPayments));
-        let remainingBalance = loanAmount;
-
-        let totalPrincipalPaid = 0;
-        let totalInterestPaid = 0;
-        let totalPaid = 0;
-
-        const newSchedule = [];
-        let cumulativePayment = 0;
-        let openingBalanaceInterest = 0;
-        let finalOpeningBalanceInterest = 0
-        let openingBalance = 0
-        let interestPayment = loanAmount * monthlyInterestRate;
-        let arrears_pm1 = 0
-        let arrears_pm2 = 0
-
-        let variance = 0;
-        let closingBalanceInterest = 0
-        let finalClosingBalanceInterest = 0
-        let finalOutstandingBalance = 0;
-        let totalOutstandingBalance = 0;
-        let finalArrears = 0;
-        let cbCapital = 0
-
-
-        let currentDate = new Date(startDate);
-
-        for (let i = 0; i < numberOfPayments; i++) {
-
-            const principalPayment = monthlyPayment - interestPayment;
-
-            let interestPaid = 0;
-            let principalPaid = 0
-            let closingBalance = 0;
-            let outstandingBalance = 0;
-
-            if (i === 0) {
-                openingBalance = remainingBalance;
-                interestPayment = remainingBalance * monthlyInterestRate;
-            }
-
-            const paymentAmount = payments[i];
-
-            if (paymentAmount) {
-
-                variance = monthlyPayment - paymentAmount.amount;
-                interestPayment = openingBalance * monthlyInterestRate
-
-                if (paymentAmount.amount > (openingBalanaceInterest + interestPayment)) {
-                    interestPaid = parseFloat(openingBalanaceInterest + interestPayment)
-                } else {
-                    interestPaid = parseFloat(paymentAmount.amount)
-                }
-
-                const remainingPayment = paymentAmount.amount - interestPaid;
-                if (paymentAmount.amount - interestPaid > 0) {
-                    principalPaid = paymentAmount.amount - interestPaid
-                }
-
-                totalPaid += paymentAmount.amount;
-            }
-
-            closingBalanceInterest = (openingBalanaceInterest + interestPayment) - interestPaid
-            closingBalance = parseFloat(openingBalance - principalPaid)
-
-            cumulativePayment += paymentAmount ? paymentAmount.amount : 0;
-            outstandingBalance = parseFloat(closingBalance + closingBalanceInterest)
-
-            const capitalRaised = calculatePPMT(loanAmount, interestRate, numberOfPayments, i + 1, loanAmount)
-
-            let capitalOutstanding = 0
-
-            if (capitalRaised - principalPaid > 0) {
-                capitalOutstanding = capitalRaised - principalPaid
-            }
-
-            if (capitalOutstanding > 0) {
-                arrears_pm1 = monthlyInterestRate * capitalOutstanding
-                arrears_pm2 = arrears_pm2
-
-                if (arrears_pm1 === 0) {
-                    arrears_pm2 = arrears_pm1
-                } else {
-                    arrears_pm2 = arrears_pm1 + arrears_pm2;
-                }
-            }
-
-            newSchedule.push({
-                // date: date,
-                payment: monthlyPayment.toFixed(2),
-                principal: principalPaid.toFixed(2),
-                capitalRaised: capitalRaised.toFixed(2),
-                capitalOutstanding: capitalOutstanding.toFixed(2),
-                interest: interestPayment.toFixed(2),
-                openingBalance: openingBalance.toFixed(2),
-                closingBalance: closingBalance.toFixed(2),
-                paymentAmount: paymentAmount ? parseFloat(paymentAmount.amount) : 0,
-                cumulativePayment: cumulativePayment.toFixed(2),
-                variance: paymentAmount ? parseFloat(variance).toFixed(2) : 0,
-                openingBalanaceInterest: openingBalanaceInterest.toFixed(2),
-                interestPaid: paymentAmount ? parseFloat(interestPaid).toFixed(2) : 0,
-                closingBalanceInterest: closingBalanceInterest.toFixed(2),
-                outstandingBalance: outstandingBalance.toFixed(2),
-                arrears_pm1: arrears_pm1.toFixed(2),
-                arrears_pm2: parseFloat(arrears_pm2).toFixed(2)
-
-            });
-
-            totalInterestPaid += interestPaid;
-            totalPrincipalPaid += principalPaid;
-            loanAmount -= principalPayment;
-            totalOutstandingBalance += outstandingBalance
-
-            // Calculate the current date for each payment
-            currentDate.setMonth(currentDate.getMonth() + 1);
-
-            openingBalanaceInterest = closingBalanceInterest;
-            openingBalance = closingBalance;
-            arrears_pm1 = arrears_pm2
-            cbCapital = closingBalance
-        }
-
-        let firstNullPaymentIndex = null;
-        let firstNullPaymentData = null;
-
-        for (let i = 0; i < newSchedule.length; i++) {
-            if (newSchedule[i].paymentAmount === 0) { // Assuming paymentAmount is 0 for null payments
-                firstNullPaymentIndex = i;
-                firstNullPaymentData = newSchedule[i];
-                break;
-            }
-        }
-
-        if (firstNullPaymentIndex !== null) {
-            const {
-                closingBalanceInterest,
-                openingBalanaceInterest,
-                outstandingBalance,
-                arrears_pm1,
-            } = firstNullPaymentData;
-
-            // Use these values or perform operations as needed
-
-            finalClosingBalanceInterest = closingBalanceInterest
-            finalOpeningBalanceInterest = openingBalanaceInterest
-            finalOutstandingBalance = outstandingBalance
-            finalArrears = arrears_pm1
-        } else {
-            // console.log('No null payment found in the schedule.');
-        }
-
-
-        const finalDate = currentDate.toLocaleDateString(); // Final date after all payments
-        const totalInterestAmount = (totalInterestPaid - loanAmount).toFixed(2);
-
-        return {
-            totalPrincipalPaid: totalPrincipalPaid.toFixed(2),
-            totalInterestPaid: totalInterestPaid.toFixed(2),
-            totalInterestAmount: totalInterestAmount,
-            totalPaid: totalPaid.toFixed(2),
-            arrears: finalArrears,
-            closingBalance: cbCapital,
-            openingBalanace: openingBalance,
-            openingBalanaceInterest: finalOpeningBalanceInterest,
-            interestRaised: interestPayment.toFixed(2),
-            closingBalanceInterest: finalClosingBalanceInterest,
-            totalOutstandingBalance: finalOutstandingBalance,
-            finalDate: finalDate
-        };
-    }
-
-    function calculatePPMT(loanAmount, monthlyInterestRate, periods, period, presentValue) {
-
-        // Calculate the monthly payment
-        let monthlyPayment = loanAmount * monthlyInterestRate / (1 - Math.pow(1 + monthlyInterestRate, -periods));
-
-        // Calculate the principal payment for the specified period
-        let principalPayment = presentValue * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, period - 1) / (Math.pow(1 + monthlyInterestRate, periods) - 1);
-
-        return principalPayment;
-    }
-
-    function formatDate(date) {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    }
-
-    function calculateAge(dateOfBirth) {
-        const dob = new Date(dateOfBirth);
-        const currentDate = new Date();
-
-        let yearsDiff = currentDate.getFullYear() - dob.getFullYear();
-
-        // Check if the birthday hasn't occurred this year yet
-        if (
-            currentDate.getMonth() < dob.getMonth() ||
-            (currentDate.getMonth() === dob.getMonth() && currentDate.getDate() < dob.getDate())
-        ) {
-            yearsDiff--;
-        }
-
-        return yearsDiff;
-    }
 
     return (
         <div className="mt-12 mb-8 flex flex-col gap-2">
@@ -375,14 +207,10 @@ export function Reports() {
                                     </Button>
                                 </div>
                             </div>
-                            <table className="w-full min-w-[640px] table-auto newLoans-table">
+                            <table className="w-full min-w-[640px] table-auto">
                                 <thead>
                                     <tr>
-                                        {[
-                                            "Loan Officer", "Contract Date", "Client Name", "NRC", "Organization", "Phone", "Employee Number",
-                                            "Acc Number", "Amount", "Interest(%)", "Expected Deduction", "Total Collectible", "Status", "Loan Term",
-                                            ""
-                                        ].map((el) => (
+                                        {["Client Name", "Email", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Contract Date", "Due Date", " "].map((el) => (
                                             <th
                                                 key={el}
                                                 className="border-b border-blue-gray-50 py-3 px-5 text-left"
@@ -414,29 +242,14 @@ export function Reports() {
                                                                 color="blue-gray"
                                                                 className="font-semibold"
                                                             >
-                                                                {loan.user_firstname + " " + loan.user_lastname}
+                                                                {loan.client_firstname + " " + loan.client_lastname}
                                                             </Typography>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.contract_date.slice(0, 10)}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_firstname + " " + loan.client_lastname}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.nrc}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.organization_name}
+                                                        {loan.client_mail}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -446,12 +259,12 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.employee_no}
+                                                        {loan.organization_name}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.account_no}
+                                                        {loan.status}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -466,22 +279,12 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.monthly_deduction.toFixed(2) + " /month"}
+                                                        {loan.contract_date.slice(0, 10)}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.total_collectible}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.status}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.cycle}
+                                                        {loan.due_date}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -512,14 +315,10 @@ export function Reports() {
                                     </Button>
                                 </div>
                             </div>
-                            <table className="w-full min-w-[640px] table-auto settlement-table">
+                            <table className="w-full min-w-[640px] table-auto">
                                 <thead>
                                     <tr>
-                                        {[
-                                            "Contract Date", "Client Name", "NRC", "Organization", "Phone Number", "Employee No", "Acc No", "Loan Amount", "Interest(%)",
-                                            "Capital Paid", "Interest Paid", "Total Collected", "Expected Deduction", "Loan Status", "Settlement Amount", "Loan Term", "Due Date",
-                                            " "
-                                        ].map((el) => (
+                                        {["Client Name", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Settlement Amount", "Settlement Date", "Contract Date", " "].map((el) => (
                                             <th
                                                 key={el}
                                                 className="border-b border-blue-gray-50 py-3 px-5 text-left"
@@ -536,7 +335,6 @@ export function Reports() {
                                 </thead>
                                 <tbody>
                                     {settledLoans.map((loan) => {
-                                        const result = calculateAmortization(loan.interest_percentage, loan.amount, loan.cycle, loan.contract_date, loan.id)
                                         const className = `py-3 px-5 ${settledLoans.length - 1
                                             ? ""
                                             : "border-b border-blue-gray-50"
@@ -552,19 +350,14 @@ export function Reports() {
                                                                 color="blue-gray"
                                                                 className="font-semibold"
                                                             >
-                                                                {loan.contract_date.slice(0, 10)}
+                                                                {loan.client_firstname + " " + loan.client_lastname}
                                                             </Typography>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_firstname + " " + loan.client_lastname}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.nrc}
+                                                        {loan.client_phone}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -574,17 +367,7 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_phone}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.employee_no}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.account_no}
+                                                        {loan.status}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -599,42 +382,17 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPrincipalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalInterestPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.monthly_deduction.toFixed(2) + " /month"}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.status}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
                                                         {loan.outright_settlement_amount}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.cycle}
+                                                        {loan.outright_settlement_date.slice(0, 10)}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.finalDate}
+                                                        {loan.contract_date.slice(0, 10)}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -664,14 +422,10 @@ export function Reports() {
                                     </Button>
                                 </div>
                             </div>
-                            <table className="w-full min-w-[640px] table-auto arrears-table">
+                            <table className="w-full min-w-[640px] table-auto">
                                 <thead>
                                     <tr>
-                                        {[
-                                            "Contract Date", "Client Name", "NRC", "Organization", "Phone", "Amount", "Interest(%)", "Expected Deduction", "Actual Deduction",
-                                            "C/B Capital", "Capital Payment", "Interest Paid", "Total Collectible", "Total Collected", "Arrears Amount", "Loan Status",
-                                            "Loan Term", "Due Date", " "
-                                        ].map((el) => (
+                                        {["Client Name", "Phone", "Organization", "Status", "Amount", "Arrears Charged", "Arrears P/M", "Arrears Due", "Arrears A/D", "Contract Date", "Due Date", " "].map((el) => (
                                             <th
                                                 key={el}
                                                 className="border-b border-blue-gray-50 py-3 px-5 text-left"
@@ -688,7 +442,6 @@ export function Reports() {
                                 </thead>
                                 <tbody>
                                     {arrears.map((loan) => {
-                                        const result = calculateAmortization(loan.interest_percentage, loan.amount, loan.cycle, loan.contract_date, loan.id)
                                         const className = `py-3 px-5 ${arrears.length - 1
                                             ? ""
                                             : "border-b border-blue-gray-50"
@@ -704,24 +457,14 @@ export function Reports() {
                                                                 color="blue-gray"
                                                                 className="font-semibold"
                                                             >
-                                                                {loan.contract_date.slice(0, 10)}
+                                                                {loan.client_firstname + " " + loan.client_lastname}
                                                             </Typography>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_firstname + " " + loan.client_lastname}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.nrc}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.organization_name}
+                                                        {loan.client_mail}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -731,52 +474,7 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.amount}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.interest_percentage}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.monthly_deduction + " /month"}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.closingBalance}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPrincipalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalInterestPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.total_collectible}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.arrears}
+                                                        {loan.organization_name}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -786,12 +484,32 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.cycle}
+                                                        {loan.amount}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.finalDate.slice(0, 10)}
+                                                        {loan.arrears_charged}
+                                                    </Typography>
+                                                </td>
+                                                <td className={className}>
+                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
+                                                        {loan.arrears_pm}
+                                                    </Typography>
+                                                </td>
+                                                <td className={className}>
+                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
+                                                        {loan.arrears_due}
+                                                    </Typography>
+                                                </td>
+                                                <td className={className}>
+                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
+                                                        {loan.arrears_ad}
+                                                    </Typography>
+                                                </td>
+                                                <td className={className}>
+                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
+                                                        {loan.due_date.slice(0, 10)}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -821,15 +539,10 @@ export function Reports() {
                                     </Button>
                                 </div>
                             </div>
-                            <table className="w-full min-w-[640px] table-auto consolidated-table">
+                            <table className="w-full min-w-[640px] table-auto">
                                 <thead>
                                     <tr>
-                                        {[
-                                            "Loan Officer", "Contract Date", "Client Name", "NRC", "Organization", "Phone", "Email", "Age", "Amount", "Interest(%)", "Expected Deduction", "Actual Deduction",
-                                            "Total O/B Capital", "O/B Interest", "Intrest Raised", "C/B Interest", "Total Balance Outstanding",
-                                            "Acc No", "C/B Capital", "Capital Payment", "Interest Paid", "Total Collectible", "Total Collected", "Arrears Amount", "Loan Status",
-                                            "Loan Term", "Due Date", " "
-                                        ].map((el) => (
+                                        {["Client Name", "Email", "Phone", "Organization", "Status", "Amount", "Interest(%)", "Contract Date", "Due Date", " "].map((el) => (
                                             <th
                                                 key={el}
                                                 className="border-b border-blue-gray-50 py-3 px-5 text-left"
@@ -846,12 +559,6 @@ export function Reports() {
                                 </thead>
                                 <tbody>
                                     {consolidated.map((loan) => {
-                                        const dateOfBirth = loan.date_of_birth
-                                        const parsedDate = new Date(dateOfBirth);
-                                        const formattedDate = formatDate(parsedDate);
-                                        const age = calculateAge(formattedDate)
-                                        // console.log("age:", loan.date_of_birth)
-                                        const result = calculateAmortization(loan.interest_percentage, loan.amount, loan.cycle, loan.contract_date, loan.id)
                                         const className = `py-3 px-5 ${consolidated.length - 1
                                             ? ""
                                             : "border-b border-blue-gray-50"
@@ -867,29 +574,14 @@ export function Reports() {
                                                                 color="blue-gray"
                                                                 className="font-semibold"
                                                             >
-                                                                {loan.user_firstname + " " + loan.user_lastname}
+                                                                {loan.client_firstname + " " + loan.client_lastname}
                                                             </Typography>
                                                         </div>
                                                     </div>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.contract_date.slice(0, 10)}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_firstname + " " + loan.client_lastname}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.nrc}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.organization_name}
+                                                        {loan.client_mail}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -899,12 +591,12 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.client_mail}
+                                                        {loan.organization_name}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {age}
+                                                        {loan.status}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -919,87 +611,12 @@ export function Reports() {
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.monthly_deduction.toFixed(2) + " /month"}
+                                                        {loan.contract_date.slice(0, 10)}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
                                                     <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.openingBalanace}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.openingBalanaceInterest}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.interestRaised}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.closingBalanceInterest}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalOutstandingBalance}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.account_no}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalOutstandingBalance}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPrincipalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalInterestPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.total_collectible.toFixed(2)}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.totalPaid}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.arrears}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.status}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {loan.cycle}
-                                                    </Typography>
-                                                </td>
-                                                <td className={className}>
-                                                    <Typography className="text-xs font-semibold text-blue-gray-600">
-                                                        {result.finalDate}
+                                                        {loan.due_date}
                                                     </Typography>
                                                 </td>
                                                 <td className={className}>
@@ -1019,7 +636,6 @@ export function Reports() {
 
                 </CardBody>
             </Card>
-
         </div>
     );
 };

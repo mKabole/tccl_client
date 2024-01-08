@@ -26,7 +26,6 @@ export function AddClient() {
 
     const [clientData, setClientData] = useState({
         firstname: "",
-        middlename: "",
         lastname: "",
         phone: "",
         email: "",
@@ -110,7 +109,6 @@ export function AddClient() {
             const postData = {
                 organizationID: selectedOrganization,
                 firstname: clientData.firstname,
-                middlename: clientData.middlename,
                 lastname: clientData.lastname,
                 phone: clientData.phone,
                 email: clientData.email,
@@ -154,9 +152,8 @@ export function AddClient() {
                     </Typography>
                 </CardHeader>
                 <CardBody className="overflow-x-scroll px-0 pt-0 pb-2">
-                    <form className="my-12 grid lg:grid-cols-1 gap-6 lg:px-12 " onSubmit={handleFormSubmit}>
+                    <form className="my-12 grid lg:grid-cols-3 gap-6 px-12" onSubmit={handleFormSubmit}>
                         <Input name="firstname" label="First Name" size="lg" onChange={handleInputChange} />
-                        <Input name="middlename" label="Middle Name" size="lg" onChange={handleInputChange} />
                         <Input name="lastname" label="Last Name" size="lg" onChange={handleInputChange} />
                         <Input name="phone" label="Phone" size="lg" onChange={handleInputChange} />
                         <Input name="email" type="email" label="Email" size="lg" onChange={handleInputChange} />
@@ -184,7 +181,7 @@ export function AddClient() {
                         </Select>
                         <Input name="employment_address" label="Employment Address" size="lg" onChange={handleInputChange} />
                         <Input name="employee_no" label="Employee Number" size="lg" onChange={handleInputChange} />
-                        <Input name="next_of_kin" label="Next of Kin (Name and Phone Number)" size="lg" onChange={handleInputChange} />
+                        <Input name="next_of_kin" label="Next of Kin" size="lg" onChange={handleInputChange} />
                         <Input name="nrc" label="NRC" size="lg" onChange={handleInputChange} />
                         <Input name="photo_url" type="file" label="Upload Photo" size="lg" onChange={handlePhotoInputChange} />
                         <Input name="nrc_url" type="file" label="Upload NRC" size="lg" onChange={handleFileInputChange} />

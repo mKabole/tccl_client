@@ -1,4 +1,4 @@
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { useAuth } from "../AuthContext";
 import {
@@ -36,19 +36,16 @@ export function SignIn() {
   const handleSubmit = (event) => {
     event.preventDefault();
 
-    console.log(userData)
-
     // Send login data to API
-    axios.post(`${API_URL}/auth/signin`, userData)
+    axios.post(`${API_URL}/users/login`, userData)
       .then((response) => {
         // Handle successful login
         if (response.data) {
-          console.log("User logged in successfully", response.data);
-          login(response.data.accessToken, response.data.role_id, response.data.user_id);
-          // navigate("/dashboard/home");
+          console.log("User logged in successfully:", response.data);
+          login();
+          navigate("/dashboard/home");
         } else {
           setError("Invalid email or password. Please try again.");
-          console.log(response)
         }
 
       })

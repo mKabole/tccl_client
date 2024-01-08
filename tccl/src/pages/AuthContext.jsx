@@ -9,7 +9,7 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         // Check if the user is logged in by checking local storage or cookies
-        const token = localStorage.getItem("token"); // Check if token exists in local storage
+        const token = localStorage.getItem("authToken"); // Check if token exists in local storage
         if (token) {
             setIsLoggedIn(true);
         } else {
@@ -18,12 +18,10 @@ export function AuthProvider({ children }) {
     }, []);
 
     // Function to perform login
-    const login = (authToken, role_id, user_id) => {
+    const login = () => {
         // Perform login logic
         setIsLoggedIn(true);
-        localStorage.setItem("token", authToken);
-        localStorage.setItem("role_id", role_id);
-        localStorage.setItem('user_id', user_id)
+        localStorage.setItem("authToken", "yourAuthToken"); // Store token in local storage upon successful login
         navigate("/dashboard/home");
     };
 
@@ -31,8 +29,7 @@ export function AuthProvider({ children }) {
     const logout = () => {
         // Perform logout logic
         setIsLoggedIn(false);
-        localStorage.removeItem("token"); 
-        localStorage.removeItem("role_id");
+        localStorage.removeItem("authToken"); // Remove token from local storage upon logout
         navigate("/auth/sign-in");
     };
 

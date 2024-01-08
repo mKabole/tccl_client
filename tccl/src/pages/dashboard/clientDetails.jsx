@@ -104,7 +104,7 @@ export function ClientDetails() {
     const age = calculateAge(formattedDate)
 
     //Reformat date created
-    const dateCreated = client.createdAt
+    const dateCreated = client.created
     const parsedCreated = new Date(dateCreated)
     const formattedCreated = formatDate(parsedCreated)
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import Papa from 'papaparse';
 import axios from 'axios';
-import { Link, useNavigate, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import Modal from 'react-modal';
 import {
@@ -18,15 +18,13 @@ import {
 export function LoanDetails() {
 
     const API_URL = import.meta.env.VITE_API_URL;
-    const navigate = useNavigate()
 
     const [showModal, setShowModal] = useState(false);
-    const [refresh, setRefresh] = useState(false)
     const [loan, setLoan] = useState([]);
     const [payments, setPayments] = useState([]);
     const [schedule, setSchedule] = useState([]);
     const [totalCollectible, settotalCollectible] = useState('')
-    const [totalPaid, settotalPaid] = useState(0)
+    const [totalPaid, settotalPaid] = useState('')
     const [settlementAmount, setSettlementAmount] = useState('')
     const [monthsLeft, setMonthsLeft] = useState(0);
 
@@ -85,14 +83,6 @@ export function LoanDetails() {
         });
     };
 
-
-    // Current date
-    const date = new Date();
-    let day = date.getDate();
-    let month = date.getMonth() + 1;
-    let year = date.getFullYear();
-    let currentDate = `${year}-${month}-${day}`;
-
     // Payments form submit
     const handleFormSubmit = (e) => {
         e.preventDefault();
@@ -100,32 +90,19 @@ export function LoanDetails() {
         // Create an object to send to your API
         const postData = {
             amount: paymentData.amount,
-            loanID: loanId,
-            date: currentDate
+            loan_id: loanId
         };
 
         console.log(postData)
-
-        if(monthlyPayment > postData.amount){
-            const updateData = {
-                has_arrears: true
-            }
-
-            axios.put(`${API_URL}/loans/${loanId}`, updateData)
-            .then((response) => {
-                console.log(response)
-            })
-        }
 
         // Send a POST request to your API to save the bank data
         axios.post(`${API_URL}/payments`, postData)
             .then((response) => {
                 // Handle success, e.g., show a success message or reset the form
-                alert(`payment details added`)
-                navigate(`/dashboard/loan-details?loan_id=${loanId}`, { replace: true })
+                console.log(`payment details added`)
             })
             .catch((error) => {
-                alert(`Error posting payment data: ${error}`);
+                console.error('Error posting payment data:', error);
                 // Handle error, e.g., show an error message
             });
     };
@@ -185,21 +162,50 @@ export function LoanDetails() {
         setShowModal(false); // Close the modal after confirmation
     };
 
+    const arrearFormSubmit = (e) => {
+        e.preventDefault();
+
+        const date = new Date();
+
+        let day = date.getDate();
+        let month = date.getMonth() + 1;
+        let year = date.getFullYear();
+
+        let currentDate = `${day}-${month}-${year}`;
+        console.log(currentDate);
+
+        // Create an object to send to your API
+        const postData = {
+            loanID: loanId,
+            arrears_charged: arrearData.arrears_charged,
+            arrears_pm: arrearData.arrears_pm,
+            arrears_due: arrearData.arrears_due,
+            arrears_ad: arrearData.arrears_ad,
+            has_arrears: 1
+        };
+
+        console.log(postData)
+
+        // Send a POST request to your API to save the bank data
+        axios.put(`${API_URL}/loans/${loanId}`, postData)
+            .then((response) => {
+                // Handle success, e.g., show a success message or reset the form
+                console.log(`Loan Arrears have been added: ${response}`)
+            })
+            .catch((error) => {
+                console.error('Error settling loan:', error);
+                // Handle error, e.g., show an error message
+            });
+    };
+
     const topUpFormSubmit = (e) => {
         e.preventDefault();
 
         let newamount = parseFloat(settlementAmount) + parseFloat(topUpData.amount)
         let newcycle = monthsLeft + parseInt(topUpData.cycle)
 
-        const date = new Date()
-        let day = date.getDate();
-        let month = date.getMonth() + 1;
-        let year = date.getFullYear();
-
-        let currentDate = `${year}-${month}-${day}`;
         // Create an object to send to your API
         const postData = {
-            contract_date: currentDate,
             amount: newamount,
             cycle: newcycle,
             is_topup: 1,
@@ -212,8 +218,7 @@ export function LoanDetails() {
             interest_percentage: loan.interest_percentage,
             statusID: 1,
             payslip_url1: loan.payslip_url1,
-            payslip_url2: loan.payslip_url2,
-            created: currentDate
+            payslip_url2: loan.payslip_url2
         };
 
         const updateData = {
@@ -245,8 +250,7 @@ export function LoanDetails() {
 
     const location = useLocation();
     const queryParams = new URLSearchParams(location.search);
-    const loanId = parseInt(queryParams.get('loan_id'));
-
+    const loanId = queryParams.get('loan_id');
     let totalCollect = 0;
     let totalPay = 0;
 
@@ -258,24 +262,16 @@ export function LoanDetails() {
         return `${year}-${month}-${day}`;
     }
 
-    function reformatDate(date) {
-        //Reformat date created
-        const dateCreated = loan.createdAt
-        const parsedCreated = new Date(dateCreated)
-        const formattedCreated = formatDate(parsedCreated)
-
-        return formattedCreated
-    }
-
-
-
+    //Reformat date created
+    const dateCreated = loan.created
+    const parsedCreated = new Date(dateCreated)
+    const formattedCreated = formatDate(parsedCreated)
 
     useEffect(() => {
         // Fetch payments from the API using axios
         axios.get(`${API_URL}/payments/${loanId}`)
             .then(response => {
-                setPayments(response.data[0]);
-                console.log("payments", response.data[0][0])
+                setPayments(response.data);
             })
             .catch(error => {
                 console.error('Error fetching payments:', error);
@@ -291,21 +287,20 @@ export function LoanDetails() {
     useEffect(() => {
         const newSchedule = [];
         let cumulativePayment = 0;
+
+
+
         let openingBalanaceInterest = 0;
-        let openingBalance = 0
-        let interestPayment = 0
-        let arrears_pm1 = 0
-        let arrears_pm2 = 0
 
 
         for (let i = 0; i < loan.cycle; i++) {
-
+            const interestPayment = remainingBalance * monthlyInterestRate;
             const principalPayment = monthlyPayment - interestPayment;
 
             let principalPaid = 0
-            let closingBalance = 0;
-            let variance = 0;
-            let interestPaid = 0;
+            // let closingBalance = 0;
+            let variance = '-';
+            let interestPaid = '-';
             let closingBalanceInterest = 0
             let outstandingBalance = 0;
 
@@ -313,90 +308,51 @@ export function LoanDetails() {
             date.setMonth(date.getMonth() + i + 1);
             date.setDate(0);
 
-            if (i === 0) {
-                openingBalance = remainingBalance;
-                interestPayment = remainingBalance * monthlyInterestRate;
-            }
+            const openingBalance = remainingBalance;
+            remainingBalance -= principalPayment;
+            let closingBalance = remainingBalance;
 
+            // Check if there is a payment for the current month
             const paymentAmount = payments[i];
 
-
             if (paymentAmount) {
-                console.log("payment amount", payments[i])
 
                 variance = monthlyPayment - paymentAmount.amount;
-                interestPayment = openingBalance * monthlyInterestRate
 
                 if (paymentAmount.amount > (openingBalanaceInterest + interestPayment)) {
                     interestPaid = parseFloat(openingBalanaceInterest + interestPayment)
                 } else {
                     interestPaid = parseFloat(paymentAmount.amount)
+                    closingBalanceInterest = (openingBalanaceInterest + interestPayment) - interestPaid
+                    interestPaid = paymentAmount.amount
                 }
 
                 const remainingPayment = paymentAmount.amount - interestPaid;
-                // principalPaid = remainingPayment > 0 ? remainingPayment : 0;
-                if (paymentAmount.amount - interestPaid > 0) {
-                    principalPaid = paymentAmount.amount - interestPaid
-                    // console.log(interestPaid)
-                }
+                principalPaid = remainingPayment > 0 ? remainingPayment : 0;
 
             }
-
-
-            closingBalanceInterest = (openingBalanaceInterest + interestPayment) - interestPaid
-            closingBalance = parseFloat(openingBalance - principalPaid)
-
-            console.log(openingBalance, principalPaid)
 
             cumulativePayment += paymentAmount ? paymentAmount.amount : 0;
             outstandingBalance = parseFloat(closingBalance + closingBalanceInterest)
-
-            const capitalRaised = calculatePPMT(loan.amount, monthlyInterestRate, loan.cycle, i + 1, loan.amount)
-
-            let capitalOutstanding = 0
-
-            if (capitalRaised - principalPaid > 0) {
-                capitalOutstanding = capitalRaised - principalPaid
-            }
-
-            if (capitalOutstanding > 0) {
-                arrears_pm1 = monthlyInterestRate * capitalOutstanding
-                arrears_pm2 = arrears_pm2
-
-                if (arrears_pm1 === 0) {
-                    arrears_pm2 = arrears_pm1
-                } else {
-                    arrears_pm2 = arrears_pm1 + arrears_pm2;
-                }
-            }
 
             newSchedule.push({
                 date: date,
                 payment: monthlyPayment.toFixed(2),
                 principal: principalPaid.toFixed(2),
-                capitalRaised: capitalRaised.toFixed(2),
-                capitalOutstanding: capitalOutstanding.toFixed(2),
                 interest: interestPayment.toFixed(2),
                 openingBalance: openingBalance.toFixed(2),
                 closingBalance: closingBalance.toFixed(2),
                 paymentAmount: paymentAmount ? parseFloat(paymentAmount.amount) : 0,
                 cumulativePayment: cumulativePayment.toFixed(2),
-                variance: paymentAmount ? parseFloat(variance).toFixed(2) : 0,
+                variance: paymentAmount ? parseFloat(variance).toFixed(2) : "-",
                 openingBalanaceInterest: openingBalanaceInterest.toFixed(2),
-                interestPaid: paymentAmount ? parseFloat(interestPaid).toFixed(2) : 0,
+                interestPaid: paymentAmount ? parseFloat(interestPaid).toFixed(2) : "-",
                 closingBalanceInterest: closingBalanceInterest.toFixed(2),
-                outstandingBalance: outstandingBalance.toFixed(2),
-                arrears_pm1: arrears_pm1.toFixed(2),
-                arrears_pm2: parseFloat(arrears_pm2).toFixed(2)
+                outstandingBalance: outstandingBalance.toFixed(2)
 
             });
-
-
             openingBalanaceInterest = closingBalanceInterest;
-            openingBalance = closingBalance;
-            arrears_pm1 = arrears_pm2
         }
-
 
         setSchedule(newSchedule);
 
@@ -405,9 +361,6 @@ export function LoanDetails() {
         for (let i = newSchedule.length - 1; i >= 0; i--) {
             if (newSchedule[i].paymentAmount !== 0) {
                 settleAmount = parseFloat(newSchedule[i].outstandingBalance.replace(/[^0-9.-]+/g, ''));
-                if (newSchedule[i].arrears_pm1 === 0) {
-
-                }
                 break;
             }
         }
@@ -424,22 +377,9 @@ export function LoanDetails() {
         }
         setMonthsLeft(nullPaymentCount);
         settotalCollectible(currencyFormatter.format(totalCollect))
-        settotalPaid(totalPay.toFixed(2))
+        settotalPaid(totalPay)
 
     }, [loan.amount, loan.interest_percentage, loan.contract_date, loan.cycle, payments]);
-
-    // Function to calculate PPMT
-
-    function calculatePPMT(loanAmount, monthlyInterestRate, periods, period, presentValue) {
-
-        // Calculate the monthly payment
-        let monthlyPayment = loanAmount * monthlyInterestRate / (1 - Math.pow(1 + monthlyInterestRate, -periods));
-
-        // Calculate the principal payment for the specified period
-        let principalPayment = presentValue * monthlyInterestRate * Math.pow(1 + monthlyInterestRate, period - 1) / (Math.pow(1 + monthlyInterestRate, periods) - 1);
-
-        return principalPayment;
-    }
 
     //Get loan Data
     useEffect(() => {
@@ -517,7 +457,7 @@ export function LoanDetails() {
                             </Typography>
                             <div className="flex flex-col gap-2">
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
-                                    Contract Date : {reformatDate(loan.contract_date)}
+                                    Contract Date : {loan.contract_date}
                                 </Typography>
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
                                     Amount : {loan.amount}
@@ -538,7 +478,7 @@ export function LoanDetails() {
                                     Settlement Date : {loan.outright_settlement_date}
                                 </Typography>
                                 <Typography className=" text-sm font-medium text-blue-gray-500">
-                                    Date Added : {reformatDate(loan.createdAt)}
+                                    Date Added : {formattedCreated}
                                 </Typography>
                             </div>
                         </div>
@@ -637,7 +577,7 @@ export function LoanDetails() {
                                 </Modal>
                             </div>
                         </div>
-                        {/* <div className='border-solid border-2 p-4 mx-2'>
+                        <div className='border-solid border-2 p-4 mx-2'>
                             <Typography variant="h6" color="blue-gray" className="mb-3">
                                 Add Arrears
                             </Typography>
@@ -651,7 +591,7 @@ export function LoanDetails() {
                                 </div>
                             </form>
 
-                        </div> */}
+                        </div>
                     </div>
                     <hr className='my-4' />
                     <div className='grid lg:grid-cols-2 lg:space-x-24 lg:gap-24  w-100'>
@@ -672,18 +612,15 @@ export function LoanDetails() {
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Date</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Expected Payment</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Actual Payment</th>
+                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Variance</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">O/B Capital</th>
-                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Raised</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Payment</th>
-                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Capital Outstanding</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">C/B Capital</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">O/B Interest</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Interest Raised</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Interest Payment</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">C/B Interest</th>
                                     <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Outstanding Balance</th>
-                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Arrears P/M</th>
-                                    <th className="border-b border-blue-gray-50 py-3 px-5 text-left text-sm">Arrears P/M 2</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -692,18 +629,15 @@ export function LoanDetails() {
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.date.toLocaleDateString()}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.payment}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.paymentAmount}</td>
+                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.variance}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.openingBalance}</td>
-                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.capitalRaised}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.principal}</td>
-                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.capitalOutstanding}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.closingBalance}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.openingBalanaceInterest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.interest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.interestPaid}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.closingBalanceInterest}</td>
                                         <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.outstandingBalance}</td>
-                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.arrears_pm1}</td>
-                                        <td className='py-3 px-5 border-b border-blue-gray-50 text-xs'>{entry.arrears_pm2}</td>
                                     </tr>
                                 ))}
                             </tbody>
